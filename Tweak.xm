@@ -1,14 +1,14 @@
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 #import "Menu.h"
-#include "offsets.h"
+#include "Offsets.h"
 
 // ==========================================
-// Funções de Leitura de Memória (IL2CPP)
+// Leitura Segura de Memória
 // ==========================================
 template<typename T>
 T ReadMemory(uint64_t address) {
-    if (!address) return T();
+    if (!address || address < 0x100000000) return T(); // Bloqueia endereços inválidos
     return *(T*)address;
 }
 
@@ -24,24 +24,23 @@ NSString* GetPlayerName(uint64_t playerPtr) {
 CGPoint GetPlayerPosition(uint64_t playerPtr) {
     uint64_t transformPtr = ReadMemory<uint64_t>(playerPtr + FF_Offsets::player_cached_transform);
     if (!transformPtr) return CGPointZero;
-    uint64_t posPtr = transformPtr + 0x38; // Offset padrão de posição no Unity Transform
+    uint64_t posPtr = transformPtr + 0x38; // Offset padrão Unity Transform
     float x = ReadMemory<float>(posPtr);
     float y = ReadMemory<float>(posPtr + 4);
     return CGPointMake(x, y);
 }
 
 // ==========================================
-// Loop de Desenho do ESP (CoreGraphics)
+// Loop de Desenho (Chamado pelo Menu.m)
 // ==========================================
-void DrawESP(CGContextRef ctx) {
-    // Se nenhum ESP estiver ligado, não gasta processamento
+void DrawESPLoop(CGContextRef ctx) {
     if (!espLineEnabled && !espBoxEnabled && !espNameEnabled && !espDistanceEnabled) return;
 
-    // ATENÇÃO: Substitua '0x0' pela base real do módulo do jogo (ex: usando _dyld_get_image_vmaddr_slide)
-    uint64_t gameBase = 0x0; 
-    
+    // O gameBase deve ser definido aqui. Em tweaks iOS, geralmente usamos _dyld_get_image_vmaddr_slide(0)
+    uint64_t gameBase = 0x0; // Substitua pela base do módulo se necessário
     uint64_t currentGame = ReadMemory<uint64_t>(gameBase + FF_Offsets::game_current_game);
     if (!currentGame) return;
+    
     uint64_t match = ReadMemory<uint64_t>(currentGame + FF_Offsets::game_match);
     if (!match) return;
 
@@ -50,6 +49,7 @@ void DrawESP(CGContextRef ctx) {
 
     int entityCount = ReadMemory<int>(entitiesPtr + 0x18); 
     uint64_t entityArray = ReadMemory<uint64_t>(entitiesPtr + 0x10);
+    if (!entityArray || entityCount <= 0 || entityCount > 100) return; // Segurança contra crash
 
     uint64_t localPlayer = ReadMemory<uint64_t>(match + FF_Offsets::match_local_player);
     CGPoint localPos = GetPlayerPosition(localPlayer);
@@ -68,10 +68,9 @@ void DrawESP(CGContextRef ctx) {
         CGPoint enemyPos = GetPlayerPosition(entity);
         float distance = sqrt(pow(enemyPos.x - localPos.x, 2) + pow(enemyPos.y - localPos.y, 2));
 
-        // Conversão simplificada (Requer WorldToScreen Matrix para funcionar 100%)
+        // Conversão simplificada (Requer WorldToScreen para precisão)
         CGPoint screenPos = CGPointMake(enemyPos.x, enemyPos.y); 
 
-        // Desenha a Linha
         if (espLineEnabled) {
             CGContextSetStrokeColorWithColor(ctx, [UIColor redColor].CGColor);
             CGContextSetLineWidth(ctx, 1.5);
@@ -80,14 +79,12 @@ void DrawESP(CGContextRef ctx) {
             CGContextStrokePath(ctx);
         }
 
-        // Desenha a Caixa
         if (espBoxEnabled) {
             CGRect boxRect = CGRectMake(screenPos.x - 20, screenPos.y - 40, 40, 80);
             CGContextSetStrokeColorWithColor(ctx, [UIColor greenColor].CGColor);
             CGContextStrokeRect(ctx, boxRect);
         }
 
-        // Desenha o Nome
         if (espNameEnabled) {
             NSString *name = GetPlayerName(entity);
             if (name) {
@@ -98,7 +95,6 @@ void DrawESP(CGContextRef ctx) {
             }
         }
 
-        // Desenha a Distância
         if (espDistanceEnabled) {
             NSString *distStr = [NSString stringWithFormat:@"[%.0fm]", distance];
             [distStr drawAtPoint:CGPointMake(screenPos.x - 15, screenPos.y + 45) withAttributes:@{
@@ -110,28 +106,30 @@ void DrawESP(CGContextRef ctx) {
 }
 
 // ==========================================
-// Injeção do Tweak no Jogo
+// Inicialização Segura (Evita Crash no Boot)
 // ==========================================
-%hook UnityFramework
+static UIWindow *overlayWindow = nil;
 
-// Hook chamado quando a Unity inicializa. Aqui mostramos o menu.
-- (void)UnityInit {
-    %orig;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+__attribute__((constructor)) static void initTweak() {
+    // Espera 10 segundos para o jogo carregar 100% antes de mostrar o menu
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        
+        // 1. Cria a janela do Menu
         [[FFMenuViewController sharedInstance] showMenu];
+        
+        // 2. Cria a janela do ESP (Transparente sobre o jogo)
+        overlayWindow = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
+        overlayWindow.windowLevel = UIWindowLevelNormal + 1; // Fica acima do jogo, mas abaixo do menu
+        overlayWindow.backgroundColor = [UIColor clearColor];
+        overlayWindow.userInteractionEnabled = NO;
+        
+        ESPOverlayView *espView = [[ESPOverlayView alloc] initWithFrame:overlayWindow.bounds];
+        [overlayWindow addSubview:espView];
+        overlayWindow.hidden = NO;
+        
+        // Loop de 60 FPS para atualizar o ESP
+        [NSTimer scheduledTimerWithTimeInterval:0.016 repeats:YES block:^(NSTimer * _Nonnull timer) {
+            [espView setNeedsDisplay]; // Força o redesenho do ESP
+        }];
     });
 }
-
-// Você deve procurar a função de renderização correta do FreeFire
-// Exemplo genérico de um hook de renderização da Unity
-- (void)UnityRender {
-    %orig;
-    // Cria o contexto gráfico para desenhar na tela
-    UIGraphicsBeginImageContextWithOptions([UIScreen mainScreen].bounds.size, NO, 0.0);
-    CGContextRef ctx = UIGraphicsGetCurrentContext();
-    
-    DrawESP(ctx);
-    
-    UIGraphicsEndImageContext();
-}
-%end
