@@ -1,0 +1,47 @@
+name: Build FF_Panel_iOS
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch: # Permite rodar manualmente clicando em um botão no GitHub
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+    - name: 📥 Checkout do Código
+      uses: actions/checkout@v4
+
+    - name: ⚙️ Configurar o Theos
+      run: |
+        export THEOS=~/theos
+        git clone --recursive https://github.com/theos/theos.git $THEOS
+        echo "THEOS=$THEOS" >> $GITHUB_ENV
+
+    - name: 📦 Instalar Dependências (ldid, dpkg)
+      run: |
+        brew install ldid dpkg make
+
+    - name: 🛠️ Compilar o Tweak (.dylib e .deb)
+      run: |
+        make clean
+        make package
+      env:
+        THEOS: ${{ env.THEOS }}
+
+    - name: 📤 Upload do arquivo .deb (Instalador)
+      uses: actions/upload-artifact@v4
+      with:
+        name: FF_Panel_iOS-Deb
+        path: packages/*.deb
+        retention-days: 7
+
+    - name: 📤 Upload da .dylib (Para injeção manual)
+      uses: actions/upload-artifact@v4
+      with:
+        name: FF_Panel_iOS-Dylib
+        path: .theos/obj/arm64/FF_Panel_iOS.dylib
+        retention-days: 7
