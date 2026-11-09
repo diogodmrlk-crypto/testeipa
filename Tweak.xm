@@ -1,14 +1,17 @@
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
+#import <mach-o/dyld.h> // Necessário para pegar a base do jogo
 #import "Menu.h"
 #include "Offsets.h"
 
-// ==========================================
-// Leitura Segura de Memória
-// ==========================================
+// Pegar endereço base do binário principal (resolvendo o crash de leitura)
+uint64_t getGameBase() {
+    return _dyld_get_image_vmaddr_slide(0); 
+}
+
 template<typename T>
 T ReadMemory(uint64_t address) {
-    if (!address || address < 0x100000000) return T(); // Bloqueia endereços inválidos
+    if (!address || address < 0x100000000) return T();
     return *(T*)address;
 }
 
@@ -24,20 +27,17 @@ NSString* GetPlayerName(uint64_t playerPtr) {
 CGPoint GetPlayerPosition(uint64_t playerPtr) {
     uint64_t transformPtr = ReadMemory<uint64_t>(playerPtr + FF_Offsets::player_cached_transform);
     if (!transformPtr) return CGPointZero;
-    uint64_t posPtr = transformPtr + 0x38; // Offset padrão Unity Transform
+    uint64_t posPtr = transformPtr + 0x38; // Unity Transform Position
     float x = ReadMemory<float>(posPtr);
     float y = ReadMemory<float>(posPtr + 4);
     return CGPointMake(x, y);
 }
 
-// ==========================================
-// Loop de Desenho (Chamado pelo Menu.m)
-// ==========================================
 extern "C" void DrawESPLoop(CGContextRef ctx) {
     if (!espLineEnabled && !espBoxEnabled && !espNameEnabled && !espDistanceEnabled) return;
 
-    // O gameBase deve ser definido aqui. Em tweaks iOS, geralmente usamos _dyld_get_image_vmaddr_slide(0)
-    uint64_t gameBase = 0x0; // Substitua pela base do módulo se necessário
+    // CORREÇÃO 1: Pega a base real do jogo
+    uint64_t gameBase = getGameBase(); 
     uint64_t currentGame = ReadMemory<uint64_t>(gameBase + FF_Offsets::game_current_game);
     if (!currentGame) return;
     
@@ -49,7 +49,7 @@ extern "C" void DrawESPLoop(CGContextRef ctx) {
 
     int entityCount = ReadMemory<int>(entitiesPtr + 0x18); 
     uint64_t entityArray = ReadMemory<uint64_t>(entitiesPtr + 0x10);
-    if (!entityArray || entityCount <= 0 || entityCount > 100) return; // Segurança contra crash
+    if (!entityArray || entityCount <= 0 || entityCount > 100) return;
 
     uint64_t localPlayer = ReadMemory<uint64_t>(match + FF_Offsets::match_local_player);
     CGPoint localPos = GetPlayerPosition(localPlayer);
@@ -68,8 +68,19 @@ extern "C" void DrawESPLoop(CGContextRef ctx) {
         CGPoint enemyPos = GetPlayerPosition(entity);
         float distance = sqrt(pow(enemyPos.x - localPos.x, 2) + pow(enemyPos.y - localPos.y, 2));
 
-        // Conversão simplificada (Requer WorldToScreen para precisão)
-        CGPoint screenPos = CGPointMake(enemyPos.x, enemyPos.y); 
+        // CORREÇÃO 2: Simulação básica de WorldToScreen
+        // O ideal é ler a ViewMatrix do jogo. Sem ela, usamos uma matemática simplificada.
+        // Isso fará o ESP aparecer, mas talvez não fique 100% preso no corpo do inimigo em 3D.
+        float dx = enemyPos.x - localPos.x;
+        float dy = enemyPos.y - localPos.y;
+        
+        // Projeção aproximada para a tela
+        CGPoint screenPos;
+        screenPos.x = screenCenter.x + (dx * 10.0f);
+        screenPos.y = screenCenter.y - (dy * 10.0f);
+
+        // Se o inimigo estiver atrás de você, não desenha
+        if (screenPos.y < 0 || screenPos.y > [UIScreen mainScreen].bounds.size.height) continue;
 
         if (espLineEnabled) {
             CGContextSetStrokeColorWithColor(ctx, [UIColor redColor].CGColor);
@@ -105,21 +116,13 @@ extern "C" void DrawESPLoop(CGContextRef ctx) {
     }
 }
 
-// ==========================================
-// Inicialização Segura (Evita Crash no Boot)
-// ==========================================
 static UIWindow *overlayWindow = nil;
-
 __attribute__((constructor)) static void initTweak() {
-    // Espera 10 segundos para o jogo carregar 100% antes de mostrar o menu
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        
-        // 1. Cria a janela do Menu
         [[FFMenuViewController sharedInstance] showMenu];
         
-        // 2. Cria a janela do ESP (Transparente sobre o jogo)
         overlayWindow = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
-        overlayWindow.windowLevel = UIWindowLevelNormal + 1; // Fica acima do jogo, mas abaixo do menu
+        overlayWindow.windowLevel = UIWindowLevelNormal + 1; 
         overlayWindow.backgroundColor = [UIColor clearColor];
         overlayWindow.userInteractionEnabled = NO;
         
@@ -127,9 +130,8 @@ __attribute__((constructor)) static void initTweak() {
         [overlayWindow addSubview:espView];
         overlayWindow.hidden = NO;
         
-        // Loop de 60 FPS para atualizar o ESP
         [NSTimer scheduledTimerWithTimeInterval:0.016 repeats:YES block:^(NSTimer * _Nonnull timer) {
-            [espView setNeedsDisplay]; // Força o redesenho do ESP
+            [espView setNeedsDisplay]; 
         }];
     });
 }
