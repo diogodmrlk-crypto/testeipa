@@ -1,6 +1,6 @@
 #import "Menu.h"
 
-// Variáveis Globais
+// Definição das variáveis globais
 bool espLineEnabled = false;
 bool espBoxEnabled = false;
 bool espNameEnabled = false;
@@ -8,9 +8,6 @@ bool espDistanceEnabled = false;
 
 @interface FFMenuViewController ()
 @property (nonatomic, strong) UIWindow *menuWindow;
-@property (nonatomic, strong) UIView *mainContainer;
-@property (nonatomic, strong) UIView *espContainer;
-@property (nonatomic, strong) UISegmentedControl *tabControl;
 @end
 
 @implementation FFMenuViewController
@@ -25,35 +22,44 @@ bool espDistanceEnabled = false;
 }
 
 - (void)showMenu {
-    if (self.menuWindow) {
-        self.menuWindow.hidden = NO;
+    // Garante que a UI seja criada na Main Thread (Evita crash)
+    if (![NSThread isMainThread]) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self showMenu];
+        });
         return;
     }
 
-    // Cria uma janela flutuante acima do jogo
-    self.menuWindow = [[UIWindow alloc] initWithFrame:CGRectMake(50, 100, 300, 350)];
+    if (self.menuWindow && !self.menuWindow.hidden) {
+        return; // Menu já está aberto
+    }
+
+    // Cria a janela flutuante
+    self.menuWindow = [[UIWindow alloc] initWithFrame:CGRectMake(50, 100, 300, 380)];
     self.menuWindow.windowLevel = UIWindowLevelAlert + 1;
     self.menuWindow.backgroundColor = [UIColor clearColor];
-    self.menuWindow.rootViewController = self;
-    [self.menuWindow makeKeyAndVisible];
-
+    self.menuWindow.rootViewController = self; // OBRIGATÓRIO para não crashar
+    
+    // Monta o layout
     [self setupUI];
+    [self.menuWindow makeKeyAndVisible];
 }
 
 - (void)setupUI {
-    // Container Principal (Fundo escuro arredondado)
-    self.mainContainer = [[UIView alloc] initWithFrame:self.menuWindow.bounds];
-    self.mainContainer.backgroundColor = [UIColor colorWithRed:0.05 green:0.05 blue:0.05 alpha:0.95];
-    self.mainContainer.layer.cornerRadius = 12;
-    self.mainContainer.layer.masksToBounds = YES;
-    self.mainContainer.layer.borderWidth = 1.5;
-    self.mainContainer.layer.borderColor = [UIColor purpleColor].CGColor;
-    [self.view addSubview:self.mainContainer];
+    self.view.backgroundColor = [UIColor clearColor];
+    
+    UIView *mainContainer = [[UIView alloc] initWithFrame:self.view.bounds];
+    mainContainer.backgroundColor = [UIColor colorWithRed:0.08 green:0.08 blue:0.08 alpha:0.95];
+    mainContainer.layer.cornerRadius = 12;
+    mainContainer.layer.masksToBounds = YES;
+    mainContainer.layer.borderWidth = 1.5;
+    mainContainer.layer.borderColor = [UIColor colorWithRed:0.6 green:0.2 blue:0.8 alpha:1.0].CGColor;
+    [self.view addSubview:mainContainer];
 
-    // Cabeçalho Roxo
+    // Header Roxo
     UIView *headerView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 300, 40)];
-    headerView.backgroundColor = [UIColor colorWithRed:0.5 green:0.1 blue:0.8 alpha:1.0];
-    [self.mainContainer addSubview:headerView];
+    headerView.backgroundColor = [UIColor colorWithRed:0.6 green:0.2 blue:0.8 alpha:1.0];
+    [mainContainer addSubview:headerView];
 
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 0, 250, 40)];
     titleLabel.text = @"FFH4X ANDROID APK MOD V8.0";
@@ -61,7 +67,6 @@ bool espDistanceEnabled = false;
     titleLabel.font = [UIFont boldSystemFontOfSize:13];
     [headerView addSubview:titleLabel];
 
-    // Botão de Fechar (X)
     UIButton *closeBtn = [UIButton buttonWithType:UIButtonTypeSystem];
     closeBtn.frame = CGRectMake(265, 5, 30, 30);
     [closeBtn setTitle:@"✕" forState:UIControlStateNormal];
@@ -69,67 +74,72 @@ bool espDistanceEnabled = false;
     [closeBtn addTarget:self action:@selector(hideMenu) forControlEvents:UIControlEventTouchUpInside];
     [headerView addSubview:closeBtn];
 
-    // Abas (AIM, ESP, CFG, INFO)
-    self.tabControl = [[UISegmentedControl alloc] initWithItems:@[@"AIM", @"ESP", @"CFG", @"INFO"]];
-    self.tabControl.frame = CGRectMake(10, 50, 280, 30);
-    self.tabControl.selectedSegmentIndex = 1; // ESP selecionado
-    self.tabControl.backgroundColor = [UIColor darkGrayColor];
-    self.tabControl.selectedSegmentTintColor = [UIColor purpleColor];
-    [self.tabControl setTitleTextAttributes:@{NSForegroundColorAttributeName:[UIColor whiteColor]} forState:UIControlStateNormal];
-    [self.tabControl addTarget:self action:@selector(tabChanged:) forControlEvents:UIControlEventValueChanged];
-    [self.mainContainer addSubview:self.tabControl];
+    // Tabs
+    UISegmentedControl *tabControl = [[UISegmentedControl alloc] initWithItems:@[@"AIM", @"ESP", @"CFG", @"INFO"]];
+    tabControl.frame = CGRectMake(10, 50, 280, 30);
+    tabControl.selectedSegmentIndex = 1;
+    tabControl.selectedSegmentTintColor = [UIColor colorWithRed:0.6 green:0.2 blue:0.8 alpha:1.0];
+    [tabControl setTitleTextAttributes:@{NSForegroundColorAttributeName:[UIColor whiteColor]} forState:UIControlStateNormal];
+    [mainContainer addSubview:tabControl];
 
-    // Container da Aba ESP
-    self.espContainer = [[UIView alloc] initWithFrame:CGRectMake(10, 90, 280, 240)];
-    self.espContainer.backgroundColor = [UIColor clearColor];
-    [self.mainContainer addSubview:self.espContainer];
+    // Switches do ESP
+    [self addSwitch:mainContainer y:100 title:@"ESP Line" action:@selector(toggleLine:) state:espLineEnabled];
+    [self addSwitch:mainContainer y:140 title:@"ESP Box" action:@selector(toggleBox:) state:espBoxEnabled];
+    [self addSwitch:mainContainer y:180 title:@"ESP Name" action:@selector(toggleName:) state:espNameEnabled];
+    [self addSwitch:mainContainer y:220 title:@"ESP DISTANCE" action:@selector(toggleDistance:) state:espDistanceEnabled];
 
-    // Adiciona os Switches do ESP
-    [self addSwitchToContainer:self.espContainer yPos:10 title:@"ESP Line" action:@selector(toggleLine:) defaultState:espLineEnabled];
-    [self addSwitchToContainer:self.espContainer yPos:50 title:@"ESP Box" action:@selector(toggleBox:) defaultState:espBoxEnabled];
-    [self addSwitchToContainer:self.espContainer yPos:90 title:@"ESP Name" action:@selector(toggleName:) defaultState:espNameEnabled];
-    [self addSwitchToContainer:self.espContainer yPos:130 title:@"ESP DISTANCE" action:@selector(toggleDistance:) defaultState:espDistanceEnabled];
-
-    // Adiciona gesto de arrastar para mover o menu
-    UIPanGestureRecognizer *panGesture = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePan:)];
-    [headerView addGestureRecognizer:panGesture];
+    // Arrastar
+    UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePan:)];
+    [headerView addGestureRecognizer:pan];
 }
 
-// Função auxiliar para criar os switches bonitinhos
-- (void)addSwitchToContainer:(UIView *)container yPos:(CGFloat)y title:(NSString *)title action:(SEL)action defaultState:(bool)state {
-    UILabel *label = [[UILabel alloc] initWithFrame:CGRectMake(10, y, 180, 30)];
-    label.text = title;
-    label.textColor = [UIColor whiteColor];
-    label.font = [UIFont systemFontOfSize:14];
-    [container addSubview:label];
-
-    UISwitch *toggle = [[UISwitch alloc] initWithFrame:CGRectMake(200, y, 50, 30)];
-    toggle.onTintColor = [UIColor purpleColor];
-    toggle.on = state;
-    [toggle addTarget:self action:action forControlEvents:UIControlEventValueChanged];
-    [container addSubview:toggle];
+- (void)addSwitch:(UIView *)parent y:(CGFloat)y title:(NSString *)title action:(SEL)action state:(bool)state {
+    UILabel *lbl = [[UILabel alloc] initWithFrame:CGRectMake(15, y, 180, 30)];
+    lbl.text = title;
+    lbl.textColor = [UIColor whiteColor];
+    [parent addSubview:lbl];
+    
+    UISwitch *sw = [[UISwitch alloc] initWithFrame:CGRectMake(220, y, 50, 30)];
+    sw.onTintColor = [UIColor colorWithRed:0.6 green:0.2 blue:0.8 alpha:1.0];
+    sw.on = state;
+    [sw addTarget:self action:action forControlEvents:UIControlEventValueChanged];
+    [parent addSubview:sw];
 }
 
-// Ações dos Switches
-- (void)toggleLine:(UISwitch *)sender { espLineEnabled = sender.isOn; }
-- (void)toggleBox:(UISwitch *)sender { espBoxEnabled = sender.isOn; }
-- (void)toggleName:(UISwitch *)sender { espNameEnabled = sender.isOn; }
-- (void)toggleDistance:(UISwitch *)sender { espDistanceEnabled = sender.isOn; }
-
-- (void)tabChanged:(UISegmentedControl *)sender {
-    // Lógica simples para mostrar/esconder containers
-    self.espContainer.hidden = (sender.selectedSegmentIndex != 1);
-}
+- (void)toggleLine:(UISwitch *)s { espLineEnabled = s.isOn; }
+- (void)toggleBox:(UISwitch *)s { espBoxEnabled = s.isOn; }
+- (void)toggleName:(UISwitch *)s { espNameEnabled = s.isOn; }
+- (void)toggleDistance:(UISwitch *)s { espDistanceEnabled = s.isOn; }
 
 - (void)hideMenu {
     self.menuWindow.hidden = YES;
 }
 
-// Lógica para arrastar a janela
-- (void)handlePan:(UIPanGestureRecognizer *)gesture {
-    CGPoint translation = [gesture translationInView:self.view];
-    gesture.view.window.center = CGPointMake(gesture.view.window.center.x + translation.x,
-                                             gesture.view.window.center.y + translation.y);
-    [gesture setTranslation:CGPointZero inView:self.view];
+- (void)handlePan:(UIPanGestureRecognizer *)g {
+    CGPoint translation = [g translationInView:self.view];
+    g.view.window.center = CGPointMake(g.view.window.center.x + translation.x, g.view.window.center.y + translation.y);
+    [g setTranslation:CGPointZero inView:self.view];
+}
+@end
+
+// ==========================================
+// CAMADA DO ESP (Overlay Transparente)
+// ==========================================
+@implementation ESPOverlayView
+- (instancetype)initWithFrame:(CGRect)frame {
+    self = [super initWithFrame:frame];
+    if (self) {
+        self.backgroundColor = [UIColor clearColor];
+        self.userInteractionEnabled = NO; // Permite clicar no jogo através do ESP
+    }
+    return self;
+}
+- (void)drawRect:(CGRect)rect {
+    CGContextRef ctx = UIGraphicsGetCurrentContext();
+    if (!ctx) return;
+    
+    // Importa a função de desenho do Tweak
+    extern void DrawESPLoop(CGContextRef context);
+    DrawESPLoop(ctx);
 }
 @end
