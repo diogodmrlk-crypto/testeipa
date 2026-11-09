@@ -5,7 +5,7 @@ on:
     branches: [ "main", "master" ]
   pull_request:
     branches: [ "main", "master" ]
-  workflow_dispatch:
+  workflow_dispatch: # Permite rodar manualmente clicando no botão
 
 jobs:
   build:
@@ -21,7 +21,7 @@ jobs:
         git clone --recursive https://github.com/theos/theos.git $THEOS
         echo "THEOS=$THEOS" >> $GITHUB_ENV
 
-    - name: 📦 Instalar Dependências (ldid, dpkg)
+    - name: 📦 Instalar Dependências (ldid, dpkg, make)
       run: |
         brew install ldid dpkg make
 
@@ -35,10 +35,10 @@ jobs:
     - name: 📁 Organizar Arquivos na Pasta Output
       run: |
         mkdir -p Output
-        # Copia o arquivo .deb gerado
-        cp packages/*.deb Output/ 
-        # Copia a .dylib gerada
-        cp .theos/obj/arm64/FF_Panel_iOS.dylib Output/
+        # Copia o arquivo .deb (se existir)
+        cp packages/*.deb Output/ 2>/dev/null || true
+        # Procura a .dylib em qualquer subpasta e copia para Output
+        find . -name "FF_Panel_iOS.dylib" -exec cp {} Output/ \;
 
     - name: 📤 Upload da Pasta Completa (Deb + Dylib)
       uses: actions/upload-artifact@v4
