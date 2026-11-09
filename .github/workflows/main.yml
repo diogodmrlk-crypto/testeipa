@@ -5,7 +5,7 @@ on:
     branches: [ "main", "master" ]
   pull_request:
     branches: [ "main", "master" ]
-  workflow_dispatch: # Permite rodar manualmente clicando em um botão no GitHub
+  workflow_dispatch:
 
 jobs:
   build:
@@ -25,23 +25,24 @@ jobs:
       run: |
         brew install ldid dpkg make
 
-    - name: 🛠️ Compilar o Tweak (.dylib e .deb)
+    - name: 🛠️ Compilar o Tweak
       run: |
         make clean
         make package
       env:
         THEOS: ${{ env.THEOS }}
 
-    - name: 📤 Upload do arquivo .deb (Instalador)
-      uses: actions/upload-artifact@v4
-      with:
-        name: FF_Panel_iOS-Deb
-        path: packages/*.deb
-        retention-days: 7
+    - name: 📁 Organizar Arquivos na Pasta Output
+      run: |
+        mkdir -p Output
+        # Copia o arquivo .deb gerado
+        cp packages/*.deb Output/ 
+        # Copia a .dylib gerada
+        cp .theos/obj/arm64/FF_Panel_iOS.dylib Output/
 
-    - name: 📤 Upload da .dylib (Para injeção manual)
+    - name: 📤 Upload da Pasta Completa (Deb + Dylib)
       uses: actions/upload-artifact@v4
       with:
-        name: FF_Panel_iOS-Dylib
-        path: .theos/obj/arm64/FF_Panel_iOS.dylib
+        name: FF_Panel_iOS_Completo
+        path: Output/
         retention-days: 7
