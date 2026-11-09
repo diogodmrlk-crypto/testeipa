@@ -1,7 +1,7 @@
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 #import "Menu.h"
-#include "Offsets.h"
+#include "offsets.h"
 
 // ==========================================
 // Funções de Leitura de Memória (IL2CPP)
