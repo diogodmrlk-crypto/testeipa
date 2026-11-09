@@ -1,0 +1,9 @@
+Package: com.painelff.ffpaneliios
+Name: FF Panel iOS
+Version: 1.0.0
+Architecture: iphoneos-arm64
+Description: Painel ESP para Free Fire
+Maintainer: SeuNome
+Author: SeuNome
+Section: Tweaks
+Depends: mobilesubstrate
