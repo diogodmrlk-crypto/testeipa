@@ -33,7 +33,7 @@ CGPoint GetPlayerPosition(uint64_t playerPtr) {
 // ==========================================
 // Loop de Desenho (Chamado pelo Menu.m)
 // ==========================================
-void DrawESPLoop(CGContextRef ctx) {
+extern "C" void DrawESPLoop(CGContextRef ctx) {
     if (!espLineEnabled && !espBoxEnabled && !espNameEnabled && !espDistanceEnabled) return;
 
     // O gameBase deve ser definido aqui. Em tweaks iOS, geralmente usamos _dyld_get_image_vmaddr_slide(0)
