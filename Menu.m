@@ -88,7 +88,7 @@ bool espDistanceEnabled = false;
     [self addSwitch:mainContainer y:180 title:@"ESP Name" action:@selector(toggleName:) state:espNameEnabled];
     [self addSwitch:mainContainer y:220 title:@"ESP DISTANCE" action:@selector(toggleDistance:) state:espDistanceEnabled];
 
-    // Arrastar
+    // Arrastar menu
     UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePan:)];
     [headerView addGestureRecognizer:pan];
 }
@@ -138,8 +138,7 @@ bool espDistanceEnabled = false;
     CGContextRef ctx = UIGraphicsGetCurrentContext();
     if (!ctx) return;
     
-    // Importa a função de desenho do Tweak
-    extern void DrawESPLoop(CGContextRef context);
+    // Chama a função C pura importada do Tweak.xm
     DrawESPLoop(ctx);
 }
 @end
